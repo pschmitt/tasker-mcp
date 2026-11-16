@@ -481,12 +481,54 @@ describe("persistConfig via the TaskerMCP.Persist task", () => {
     const r = await persistConfig(ctx, timing());
     expect(r).toEqual({ persisted: true, durationMs: expect.any(Number), restarted: true });
     expect(android.commands()).toEqual([
+      "shell settings get secure enabled_accessibility_services",
+      "shell settings get secure accessibility_enabled",
       "shell am force-stop net.dinglisch.android.taskerm",
       "shell am start -n net.dinglisch.android.taskerm/.Tasker",
       "shell input keyevent KEYCODE_HOME",
     ]);
     // Saved, then the server is awaited and the configuration read again to compare.
     expect(phone.routes()).toEqual(["/backup", "/run", "/ping", "/backup"]);
+  });
+
+  it("puts the enabled accessibility services back after the restart", async () => {
+    // Android drops an app's accessibility services from the list when it is force-stopped.
+    android.secure = {
+      enabled_accessibility_services:
+        "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyAccessibilityService\n",
+      accessibility_enabled: "1\n",
+    };
+    const { ctx } = await setup({ runner: saved() });
+    const r = await persistConfig(ctx, timing());
+    expect(r).toEqual({
+      persisted: true,
+      durationMs: expect.any(Number),
+      restarted: true,
+      accessibilityRestored: true,
+    });
+    const cmds = android.commands();
+    const stop = cmds.indexOf("shell am force-stop net.dinglisch.android.taskerm");
+    const put = cmds.indexOf(
+      "shell settings put secure enabled_accessibility_services net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyAccessibilityService",
+    );
+    expect(stop).toBeGreaterThan(-1);
+    expect(put).toBeGreaterThan(stop);
+    expect(cmds).toContain("shell settings put secure accessibility_enabled 1");
+  });
+
+  it("leaves the accessibility settings alone when none were on", async () => {
+    const { ctx } = await setup({ runner: saved() });
+    const r = await persistConfig(ctx, timing());
+    expect(r.accessibilityRestored).toBeUndefined();
+    expect(android.commands().some((c) => c.includes("settings put"))).toBe(false);
+  });
+
+  it("does not fail the persist when the accessibility settings cannot be written", async () => {
+    android.secure = { enabled_accessibility_services: "a/b\n", accessibility_enabled: "1\n" };
+    android.failOn = { match: "settings put secure", code: 1 };
+    const { ctx } = await setup({ runner: saved() });
+    const r = await persistConfig(ctx, timing());
+    expect(r).toMatchObject({ persisted: true, restarted: true, accessibilityRestored: false });
   });
 
   it("does not restart with restart: false or persistRestart off", async () => {

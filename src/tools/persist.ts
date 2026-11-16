@@ -90,6 +90,8 @@ export interface PersistOutcome {
   restarted?: boolean;
   /** Why Tasker was not restarted although asked to. */
   restartSkipped?: string;
+  /** Whether Tasker's accessibility service (and any other that was on) was switched back on after the restart. */
+  accessibilityRestored?: boolean;
 }
 
 export interface PersistOptions extends Partial<PersistTiming> {
@@ -234,7 +236,11 @@ async function restartTasker(
   ctx: ToolContext,
   before: TaskerDoc,
   t: PersistTiming,
-): Promise<{ restarted: boolean; restartSkipped?: string }> {
+): Promise<{
+  restarted: boolean;
+  restartSkipped?: string;
+  accessibilityRestored?: boolean;
+}> {
   let serial: string | undefined;
   try {
     serial = await ctx.serial();
@@ -256,6 +262,10 @@ async function restartTasker(
     pollMs: t.pollMs,
     settleMs: t.settleMs,
   });
+  // Android removes an app's accessibility services from the enabled list when the app is
+  // force-stopped, so Tasker would lose its accessibility permission on every restart.
+  // Remember what was on and put it back once Tasker runs again.
+  const a11y = await readAccessibility(ui);
   try {
     await ui.shell("am", "force-stop", TASKER_PACKAGE);
     await t.sleep(t.settleMs);
@@ -264,6 +274,7 @@ async function restartTasker(
     await t.sleep(t.settleMs);
     await ui.key("HOME").catch(() => undefined);
   } catch (e) {
+    await restoreAccessibility(ui, a11y).catch(() => undefined);
     throw new ToolError(
       `The configuration is saved, but restarting Tasker failed: ${msg(e)}`,
       "force-stop and reopen Tasker by hand",
@@ -286,7 +297,53 @@ async function restartTasker(
       "check the phone; restore_snapshot can put a previous configuration back",
     );
   }
-  return { restarted: true };
+  const accessibilityRestored = await restoreAccessibility(ui, a11y);
+  return a11y.services === "" ? { restarted: true } : { restarted: true, accessibilityRestored };
+}
+
+interface AccessibilityState {
+  /** Colon separated list of enabled accessibility services; empty when none. */
+  services: string;
+  /** The accessibility_enabled flag ("1" when on). */
+  enabled: string;
+}
+
+const A11Y_SERVICES = "enabled_accessibility_services";
+const A11Y_FLAG = "accessibility_enabled";
+
+/** Read a secure setting; adb prints "null" for an unset one. */
+async function secureSetting(ui: UiDriver, name: string): Promise<string> {
+  const v = (await ui.shell("settings", "get", "secure", name)).trim();
+  return v === "null" ? "" : v;
+}
+
+async function readAccessibility(ui: UiDriver): Promise<AccessibilityState> {
+  try {
+    return {
+      services: await secureSetting(ui, A11Y_SERVICES),
+      enabled: await secureSetting(ui, A11Y_FLAG),
+    };
+  } catch {
+    return { services: "", enabled: "" };
+  }
+}
+
+/** Switch the accessibility services that were on back on. False when that failed. */
+async function restoreAccessibility(ui: UiDriver, before: AccessibilityState): Promise<boolean> {
+  if (before.services === "") return true;
+  try {
+    await ui.shell("settings", "put", "secure", A11Y_SERVICES, before.services);
+    await ui.shell(
+      "settings",
+      "put",
+      "secure",
+      A11Y_FLAG,
+      before.enabled === "" ? "1" : before.enabled,
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -449,6 +506,9 @@ export const register: RegisterTools = (server, ctx) => {
         durationMs: r.durationMs,
         ...(r.restarted === undefined ? {} : { restarted: r.restarted }),
         ...(r.restartSkipped === undefined ? {} : { restartSkipped: r.restartSkipped }),
+        ...(r.accessibilityRestored === undefined
+          ? {}
+          : { accessibilityRestored: r.accessibilityRestored }),
       });
     }),
   );

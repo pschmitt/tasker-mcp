@@ -69,6 +69,8 @@ export class FakeAndroid {
   picked: string | undefined;
   nagOnStart = false;
   windowDump = "    mShowingDream=false mDreamingLockscreen=false\n    isKeyguardShowing=false\n";
+  /** Secure settings the fake keeps: `settings get/put secure <name>`. */
+  secure: Record<string, string> = {};
   powerDump = "  mWakefulness=Awake\n  mWakefulnessChanging=false\n";
   /** What `logcat -d` prints; saving the restored editor appends saveLog. */
   logcat = "";
@@ -163,6 +165,10 @@ export class FakeAndroid {
           return out("ERROR: could not get idle state.\n");
         }
         return out(`UI hierchary dumped to: ${cmd[3]}\n`);
+      case "settings":
+        if (cmd[1] === "get") return out(this.secure[cmd[3] as string] ?? "null\n");
+        if (cmd[1] === "put") this.secure[cmd[3] as string] = `${cmd[4]}\n`;
+        return out("");
       case "cat":
         return out(this.xml());
       case "input":
