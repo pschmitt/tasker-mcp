@@ -49,6 +49,25 @@ install beyond Tasker itself.
 Give the server the token with `TASKER_TOKEN` or, better, `TASKER_TOKEN_FILE`
 (a file containing just the token).
 
+### Nix
+
+The repository is a flake. Run it, or take the package from your own flake:
+
+```bash
+nix run github:pschmitt/tasker-mcp -- --help
+```
+
+```nix
+{
+  inputs.tasker-mcp.url = "github:pschmitt/tasker-mcp";
+  inputs.tasker-mcp.inputs.nixpkgs.follows = "nixpkgs";
+  # packages.<system>.default, or overlays.default for pkgs.tasker-mcp
+}
+```
+
+`nix develop` gives a shell with Node 26. After changing `package-lock.json`,
+update `npmDepsHash` in `nix/package.nix`.
+
 ### 3. Install the server
 
 The package is not published to npm yet (the publish workflow currently runs
