@@ -87,7 +87,7 @@ export async function finishMutation(ctx: ToolContext, warnings: string[]): Prom
   const notPersisted: PersistFields = { persisted: false, persistHint: PERSIST_HINT };
   if (ctx.config.autoPersist !== true) return notPersisted;
   try {
-    await persistConfig(ctx);
+    await persistConfig(ctx, { restart: false });
     return { persisted: true };
   } catch (e) {
     const hint = e instanceof ToolError && e.hint !== undefined ? `; ${e.hint}` : "";

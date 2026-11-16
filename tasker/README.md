@@ -113,7 +113,10 @@ Verified on Tasker 6.6.20 (trial build) on an Android 17 emulator.
   returns `persisted <bytes> bytes tasks=N profiles=N projects=N scenes=N; ...`
   (or `REFUSED:` / `FAILED:`); the server compares the counts with the
   configuration it just read. A restarted Tasker shows the saved state; an
-  editor that was already open keeps its older copy until it is reopened.
+  editor that was already open keeps its older copy until it is reopened, so
+  `persist_config` then runs `am force-stop net.dinglisch.android.taskerm` and
+  `am start -n net.dinglisch.android.taskerm/.Main` over adb (Home key
+  afterwards), waits for `/ping` and compares `/backup` with what it saved.
 - **Persisting, fallback (older phone projects).** `GET /backup` runs Data
   Backup, which writes Active to
   `/sdcard/Tasker/configs/user/tasker-mcp-live.xml`. The desktop server then

@@ -525,6 +525,7 @@ export async function createFakeContext(opts: FakeContextOptions = {}): Promise<
     adbPath: "adb",
     autoForward: false,
     forwardPort: 1821,
+    persistRestart: true,
     autoPersist: false,
     policy: opts.policy ?? { allowConfigImport: true },
     ...opts.config,

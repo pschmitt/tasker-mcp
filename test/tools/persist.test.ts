@@ -462,19 +462,69 @@ describe("persistConfig via the TaskerMCP.Persist task", () => {
       };
     };
 
-  it("saves without adb and without touching the screen", async () => {
+  it("saves without adb and without touching the screen, and says why it did not restart", async () => {
     const { ctx, phone } = await setup({ serial: null, runner: saved() });
     const r = await persistConfig(ctx, timing());
-    expect(r).toEqual({ persisted: true, durationMs: expect.any(Number) });
+    expect(r).toEqual({
+      persisted: true,
+      durationMs: expect.any(Number),
+      restarted: false,
+      restartSkipped: expect.stringMatching(/no adb device/),
+    });
     expect(android.calls).toEqual([]);
     expect(phone.routes()).toEqual(["/backup", "/run"]);
     expect(phone.calls.find((c) => c.route === "/run")?.body).toMatchObject({ task: PERSIST_TASK });
   });
 
+  it("restarts Tasker by default so the editor shows the saved state", async () => {
+    const { ctx, phone } = await setup({ runner: saved() });
+    const r = await persistConfig(ctx, timing());
+    expect(r).toEqual({ persisted: true, durationMs: expect.any(Number), restarted: true });
+    expect(android.commands()).toEqual([
+      "shell am force-stop net.dinglisch.android.taskerm",
+      "shell am start -n net.dinglisch.android.taskerm/.Main",
+      "shell input keyevent KEYCODE_HOME",
+    ]);
+    // Saved, then the server is awaited and the configuration read again to compare.
+    expect(phone.routes()).toEqual(["/backup", "/run", "/ping", "/backup"]);
+  });
+
+  it("does not restart with restart: false or persistRestart off", async () => {
+    const a = await setup({ runner: saved() });
+    expect((await persistConfig(a.ctx, { ...timing(), restart: false })).restarted).toBeUndefined();
+    expect(android.calls).toEqual([]);
+    await t?.close();
+    await fc?.cleanup();
+    const b = await setup({ runner: saved(), config: { persistRestart: false } });
+    expect((await persistConfig(b.ctx, timing())).restarted).toBeUndefined();
+    expect(android.calls).toEqual([]);
+    await t?.close();
+    await fc?.cleanup();
+    // The argument beats the setting in both directions.
+    const c = await setup({ runner: saved(), config: { persistRestart: false } });
+    expect((await persistConfig(c.ctx, { ...timing(), restart: true })).restarted).toBe(true);
+  });
+
+  it("reports a restart that leaves Tasker serving something else", async () => {
+    const { ctx, phone } = await setup({ runner: saved() });
+    // After the relaunch the phone answers with one task fewer.
+    const realBackup = ctx.backup;
+    let n = 0;
+    ctx.backup = async () => {
+      const b = await realBackup();
+      if (++n < 2) return b;
+      return { xml: b.xml, doc: TaskerDoc.parse(EMPTY_BACKUP) };
+    };
+    await expect(persistConfig(ctx, timing())).rejects.toThrow(
+      /After restarting, Tasker serves a different configuration/,
+    );
+    expect(phone.routes()).toContain("/ping");
+  });
+
   it("works with a locked screen", async () => {
     android.windowDump = "isKeyguardShowing=true";
     const { ctx } = await setup({ runner: saved() });
-    expect((await persistConfig(ctx, timing())).persisted).toBe(true);
+    expect((await persistConfig(ctx, { ...timing(), restart: false })).persisted).toBe(true);
     expect(android.calls).toEqual([]);
   });
 
@@ -498,5 +548,15 @@ describe("persistConfig via the TaskerMCP.Persist task", () => {
     });
     expect((await persistConfig(ctx, timing())).persisted).toBe(true);
     expect(android.picked).toBe("tasker-mcp-live");
+  });
+
+  it("never restarts Tasker on auto-persist", async () => {
+    await setup({ runner: saved(), autoPersist: true });
+    const r = await t!.call("create_task", {
+      name: "MCP.New",
+      actions: [{ action: "Flash", args: { Text: "x" } }],
+    });
+    expect(r.json).toMatchObject({ ok: true });
+    expect(android.commands().some((c) => c.includes("force-stop"))).toBe(false);
   });
 });

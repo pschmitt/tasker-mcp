@@ -23,6 +23,11 @@ export interface Config {
   policy: WritePolicy;
   /** Run persist_config after every mutating tool (TASKER_AUTO_PERSIST, --auto-persist). */
   autoPersist: boolean;
+  /**
+   * Restart Tasker after persist_config so its editor shows the saved state
+   * (TASKER_PERSIST_RESTART, --no-persist-restart; the tool argument `restart` wins).
+   */
+  persistRestart: boolean;
 }
 
 export type ConfigAction = "run" | "help" | "version";
@@ -77,6 +82,11 @@ Options:
                         Works under --write-allow too; with --url it needs
                         --serial.
   --no-auto-persist     Turn auto-persist off.
+  --persist-restart     Make persist_config force-stop and relaunch Tasker after saving, so its
+                        editor shows the saved state (needs adb). Env
+                        TASKER_PERSIST_RESTART=true|false. Default: on; the tool's "restart"
+                        argument overrides it per call. Auto-persist never restarts Tasker.
+  --no-persist-restart  persist_config only saves, it does not restart Tasker.
   --help                Show this help
   --version             Show the version
 
@@ -102,6 +112,8 @@ const SWITCH_FLAGS: Record<string, [string, string]> = {
   "no-config-import": ["config-import", "false"],
   "auto-persist": ["auto-persist", "true"],
   "no-auto-persist": ["auto-persist", "false"],
+  "persist-restart": ["persist-restart", "true"],
+  "no-persist-restart": ["persist-restart", "false"],
 };
 
 export class ConfigError extends Error {
@@ -238,6 +250,14 @@ export function loadAutoPersist(flags: Map<string, string>, env: NodeJS.ProcessE
   return raw === undefined ? false : parseBool(raw, "TASKER_AUTO_PERSIST");
 }
 
+/** --persist-restart / --no-persist-restart, else TASKER_PERSIST_RESTART, else true. */
+export function loadPersistRestart(flags: Map<string, string>, env: NodeJS.ProcessEnv): boolean {
+  const flag = flags.get("persist-restart");
+  if (flag !== undefined) return flag === "true";
+  const raw = nonEmpty(env["TASKER_PERSIST_RESTART"]);
+  return raw === undefined ? true : parseBool(raw, "TASKER_PERSIST_RESTART");
+}
+
 export function loadConfig(
   argv: string[],
   env: NodeJS.ProcessEnv,
@@ -270,6 +290,7 @@ export function loadConfig(
         forwardPort: DEFAULT_FORWARD_PORT,
         policy: { ...DEFAULT_POLICY },
         autoPersist: false,
+        persistRestart: true,
       },
     };
   }
@@ -333,6 +354,7 @@ export function loadConfig(
       forwardPort,
       policy: loadPolicy(flags, env),
       autoPersist: loadAutoPersist(flags, env),
+      persistRestart: loadPersistRestart(flags, env),
     },
   };
 }

@@ -30,6 +30,7 @@
  * 3. Wait for /ping (the restore may restart the monitor), then read /backup
  *    again and check nothing changed.
  */
+import { z } from "zod";
 import type { RunResult } from "../client/index.ts";
 import { UiDriver, type UiNode } from "../device/ui.ts";
 import type { TaskerDoc } from "../model/document.ts";
@@ -85,6 +86,15 @@ export const persistDefaults: PersistTiming = {
 export interface PersistOutcome {
   persisted: true;
   durationMs: number;
+  /** Set when the saved copy was written by the Persist task: whether Tasker was restarted. */
+  restarted?: boolean;
+  /** Why Tasker was not restarted although asked to. */
+  restartSkipped?: string;
+}
+
+export interface PersistOptions extends Partial<PersistTiming> {
+  /** Restart Tasker after saving (default: the server's persistRestart setting). */
+  restart?: boolean;
 }
 
 /** The phone project's task that saves the running configuration (see the module doc). */
@@ -216,6 +226,69 @@ async function backupWithRetry(
 }
 
 /**
+ * Force-stop and relaunch Tasker so it, and its editor, load the saved copy: an editor that is
+ * already open keeps an older copy and would overwrite the save the next time it is saved.
+ * Then check that the configuration Tasker serves is still the one that was saved.
+ */
+async function restartTasker(
+  ctx: ToolContext,
+  before: TaskerDoc,
+  t: PersistTiming,
+): Promise<{ restarted: boolean; restartSkipped?: string }> {
+  let serial: string | undefined;
+  try {
+    serial = await ctx.serial();
+  } catch {
+    serial = undefined;
+  }
+  if (serial === undefined) {
+    return {
+      restarted: false,
+      restartSkipped: "no adb device: restart Tasker by hand so its editor shows the saved state",
+    };
+  }
+  const ui = new UiDriver({
+    exec: ctx.exec,
+    adbPath: ctx.config.adbPath,
+    serial,
+    sleep: t.sleep,
+    now: t.now,
+    pollMs: t.pollMs,
+    settleMs: t.settleMs,
+  });
+  try {
+    await ui.shell("am", "force-stop", TASKER_PACKAGE);
+    await t.sleep(t.settleMs);
+    await ui.shell("am", "start", "-n", `${TASKER_PACKAGE}/.Main`);
+    await t.sleep(t.settleMs);
+    await ui.key("HOME").catch(() => undefined);
+  } catch (e) {
+    throw new ToolError(
+      `The configuration is saved, but restarting Tasker failed: ${msg(e)}`,
+      "force-stop and reopen Tasker by hand",
+    );
+  }
+  try {
+    const client = await ctx.client();
+    await client.waitForPing({ timeoutMs: t.restartTimeoutMs, intervalMs: t.pingIntervalMs });
+  } catch (e) {
+    throw new ToolError(
+      `The configuration is saved, but Tasker's server did not come back after the restart: ${msg(e)}`,
+      "open Tasker, and check that the TaskerMCP HTTP profile is enabled",
+    );
+  }
+  const after = await backupWithRetry(ctx, t);
+  const diff = compareConfigs(before, after.doc);
+  if (diff.length > 0) {
+    throw new ToolError(
+      `After restarting, Tasker serves a different configuration than the one saved: ${diff.join("; ")}`,
+      "check the phone; restore_snapshot can put a previous configuration back",
+    );
+  }
+  return { restarted: true };
+}
+
+/**
  * Save the running configuration with the phone project's TaskerMCP.Persist
  * task. Returns undefined when the task is not there (an older phone project)
  * so the caller can fall back to the editor. A task that ran but refused or
@@ -268,15 +341,21 @@ async function persistViaTask(
  */
 export async function persistConfig(
   ctx: ToolContext,
-  opts: Partial<PersistTiming> = {},
+  opts: PersistOptions = {},
 ): Promise<PersistOutcome> {
-  const t: PersistTiming = { ...persistDefaults, ...opts };
+  const { restart, ...timing } = opts;
+  const t: PersistTiming = { ...persistDefaults, ...timing };
+  const wantRestart = restart ?? ctx.config.persistRestart ?? true;
   return exclusive(async () => {
     const start = t.now();
     // Rewrites tasker-mcp-live.xml with the live configuration.
     const before = await ctx.backup();
     const viaTask = await persistViaTask(ctx, before.doc, t, start);
-    if (viaTask !== undefined) return viaTask;
+    if (viaTask !== undefined) {
+      if (!wantRestart) return viaTask;
+      const r = await restartTasker(ctx, before.doc, t);
+      return { ...viaTask, ...r, durationMs: t.now() - start };
+    }
     const serial = await ctx.serial();
     if (serial === undefined) {
       throw new ToolError(
@@ -341,10 +420,17 @@ export const register: RegisterTools = (server, ctx) => {
         "Save Tasker's running configuration to disk so changes survive a Tasker restart or reboot. " +
         "Tasker only writes its configuration when its own editor saves, so every change made through tasker-mcp is live but unsaved until this runs (and saving in the editor first discards it). " +
         "It runs the phone project's TaskerMCP.Persist task, which writes the configuration to Tasker's saved copy from inside Tasker: no adb and no screen needed, a few seconds. " +
-        "A Tasker editor that is open keeps its older copy until it is reopened, so restart Tasker to see the saved state. " +
+        "By default it then force-stops and relaunches Tasker (needs adb; the server is unreachable for a few seconds), so Tasker and its editor show the saved state; pass restart: false to skip that. " +
         "With an older phone project (no TaskerMCP.Persist task) it falls back to driving Tasker's editor over adb (Data > Restore > tasker-mcp-live, then the Apply checkmark; needs adb and an unlocked, awake screen, about 25 seconds). It works under a write allow list too. Call it once after a batch of changes. " +
         "Example: persist_config {}",
-      inputSchema: {},
+      inputSchema: {
+        restart: z
+          .boolean()
+          .optional()
+          .describe(
+            "Force-stop and relaunch Tasker after saving, so it and its editor show the saved state (needs adb; the server is unreachable for a few seconds). Default: the server's TASKER_PERSIST_RESTART setting, which is on.",
+          ),
+      },
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -352,9 +438,17 @@ export const register: RegisterTools = (server, ctx) => {
         openWorldHint: true,
       },
     },
-    handler(async () => {
-      const r = await persistConfig(ctx);
-      return ok({ persisted: true, durationMs: r.durationMs });
+    handler(async (args: { restart?: boolean }) => {
+      const r = await persistConfig(
+        ctx,
+        args.restart === undefined ? {} : { restart: args.restart },
+      );
+      return ok({
+        persisted: true,
+        durationMs: r.durationMs,
+        ...(r.restarted === undefined ? {} : { restarted: r.restarted }),
+        ...(r.restartSkipped === undefined ? {} : { restartSkipped: r.restartSkipped }),
+      });
     }),
   );
 };

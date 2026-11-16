@@ -115,21 +115,22 @@ Verify with the `ping` tool.
 
 Every option is an environment variable or a command line flag; flags win.
 
-| Env var                       | Flag                                          | Default                                      | Meaning                                                                                                                                     |
-| ----------------------------- | --------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TASKER_URL`                  | `--url`                                       | unset                                        | Phone URL, e.g. `http://192.168.1.50:1821`. Unset means auto `adb forward` to `localhost`.                                                  |
-| `TASKER_TOKEN`                | `--token`                                     | unset                                        | Bearer token.                                                                                                                               |
-| `TASKER_TOKEN_FILE`           | `--token-file`                                | unset                                        | File holding the token. Order: `--token`, `--token-file`, `TASKER_TOKEN`, `TASKER_TOKEN_FILE`.                                              |
-| `TASKER_ADB_SERIAL`           | `--serial`                                    | unset                                        | adb device serial when more than one is attached.                                                                                           |
-| `TASKER_FORWARD_PORT`         | `--forward-port`                              | `1821`                                       | Local port of the adb forward to the phone (the phone always serves 1821). Use a different one per phone when you run one server per phone. |
-| `TASKER_ADB`                  | `--adb`                                       | `adb`                                        | adb executable.                                                                                                                             |
-| `TASKER_MCP_HOME`             | `--home`                                      | `$XDG_STATE_HOME/tasker-mcp`                 | State directory (snapshots). `~/.local/state/tasker-mcp` when `XDG_STATE_HOME` is unset.                                                    |
-| `TASKER_MCP_CACHE_DIR`        | `--cache-dir`                                 | `$XDG_CACHE_HOME/tasker-mcp`                 | Cache directory (Tasker userguide). `~/.cache/tasker-mcp` when `XDG_CACHE_HOME` is unset.                                                   |
-| `TASKER_TIMEOUT_MS`           | `--timeout-ms`                                | `30000`                                      | Per-request timeout in milliseconds.                                                                                                        |
-| `TASKER_WRITE_ALLOW`          | `--write-allow`                               | unset (everything)                           | Comma separated name prefixes. Mutating tools only touch objects whose name starts with one.                                                |
-| `TASKER_WRITE_ALLOW_PROJECTS` | `--write-allow-projects`                      | unset                                        | Comma separated project name prefixes. Those projects, and every task, profile and scene in them, are writable too.                         |
-| `TASKER_ALLOW_CONFIG_IMPORT`  | `--allow-config-import`, `--no-config-import` | `true`, or `false` when an allow list is set | Allow whole-configuration imports (see below).                                                                                              |
-| `TASKER_AUTO_PERSIST`         | `--auto-persist`, `--no-auto-persist`         | `false`                                      | Run `persist_config` after every change (a few seconds with the `TaskerMCP.Persist` task). See Limitations.                                 |
+| Env var                       | Flag                                          | Default                                      | Meaning                                                                                                                                                   |
+| ----------------------------- | --------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TASKER_URL`                  | `--url`                                       | unset                                        | Phone URL, e.g. `http://192.168.1.50:1821`. Unset means auto `adb forward` to `localhost`.                                                                |
+| `TASKER_TOKEN`                | `--token`                                     | unset                                        | Bearer token.                                                                                                                                             |
+| `TASKER_TOKEN_FILE`           | `--token-file`                                | unset                                        | File holding the token. Order: `--token`, `--token-file`, `TASKER_TOKEN`, `TASKER_TOKEN_FILE`.                                                            |
+| `TASKER_ADB_SERIAL`           | `--serial`                                    | unset                                        | adb device serial when more than one is attached.                                                                                                         |
+| `TASKER_FORWARD_PORT`         | `--forward-port`                              | `1821`                                       | Local port of the adb forward to the phone (the phone always serves 1821). Use a different one per phone when you run one server per phone.               |
+| `TASKER_ADB`                  | `--adb`                                       | `adb`                                        | adb executable.                                                                                                                                           |
+| `TASKER_MCP_HOME`             | `--home`                                      | `$XDG_STATE_HOME/tasker-mcp`                 | State directory (snapshots). `~/.local/state/tasker-mcp` when `XDG_STATE_HOME` is unset.                                                                  |
+| `TASKER_MCP_CACHE_DIR`        | `--cache-dir`                                 | `$XDG_CACHE_HOME/tasker-mcp`                 | Cache directory (Tasker userguide). `~/.cache/tasker-mcp` when `XDG_CACHE_HOME` is unset.                                                                 |
+| `TASKER_TIMEOUT_MS`           | `--timeout-ms`                                | `30000`                                      | Per-request timeout in milliseconds.                                                                                                                      |
+| `TASKER_WRITE_ALLOW`          | `--write-allow`                               | unset (everything)                           | Comma separated name prefixes. Mutating tools only touch objects whose name starts with one.                                                              |
+| `TASKER_WRITE_ALLOW_PROJECTS` | `--write-allow-projects`                      | unset                                        | Comma separated project name prefixes. Those projects, and every task, profile and scene in them, are writable too.                                       |
+| `TASKER_ALLOW_CONFIG_IMPORT`  | `--allow-config-import`, `--no-config-import` | `true`, or `false` when an allow list is set | Allow whole-configuration imports (see below).                                                                                                            |
+| `TASKER_PERSIST_RESTART`      | `--persist-restart`, `--no-persist-restart`   | `true`                                       | Force-stop and relaunch Tasker after `persist_config` saved, so its screen shows the saved state (needs adb). The tool's `restart` argument overrides it. |
+| `TASKER_AUTO_PERSIST`         | `--auto-persist`, `--no-auto-persist`         | `false`                                      | Run `persist_config` after every change (a few seconds with the `TaskerMCP.Persist` task). See Limitations.                                               |
 
 Also `--help` and `--version`.
 
@@ -257,9 +258,9 @@ Tools that change your Tasker configuration or phone state are marked **yes**.
 
 ### Saving to disk
 
-| Tool             | What it does                                                                                                                                                                                                                                                                                              | Mutates |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `persist_config` | Save Tasker's running configuration to disk so changes survive a Tasker restart or reboot. Runs the phone project's `TaskerMCP.Persist` task (no adb, no screen); falls back to driving Tasker's editor over adb (Data > Restore of the live backup, then the Apply checkmark) on an older phone project. | yes     |
+| Tool             | What it does                                                                                                                                                                                                                                                                                                                                                                                            | Mutates |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `persist_config` | Save Tasker's running configuration to disk so changes survive a Tasker restart or reboot. Runs the phone project's `TaskerMCP.Persist` task (no adb, no screen); falls back to driving Tasker's editor over adb (Data > Restore of the live backup, then the Apply checkmark) on an older phone project. By default it then restarts Tasker so the app's screen matches (`restart: false` skips that). | yes     |
 
 Every mutating tool's result carries `persisted` (and a `persistHint` when it
 is `false`). See Limitations for why.
@@ -335,8 +336,14 @@ library was checked against Tasker's own editor, in both directions, is in
   configuration to Tasker's saved copy (`files/autobackup.xml`, checked first,
   the previous copy kept as `tasker-mcp-autobackup-prev.xml`), and Tasker loads
   it at its next start. That needs no adb, no unlocked screen and takes a few
-  seconds. An editor that is already open keeps its older copy until you
-  reopen it, so restart Tasker to see the saved state. With an older phone
+  seconds. Tasker's editor (the app's screen) shows its own copy, loaded when
+  Tasker starts, so an open editor would keep the old data and could overwrite
+  the save. So `persist_config` then force-stops and relaunches Tasker by
+  default (`restart: false` or `TASKER_PERSIST_RESTART=false` skips that; it
+  needs adb, and the server is unreachable for a few seconds). The app's screen
+  then matches the saved configuration, and the server checks that Tasker
+  serves the same tasks, profiles, projects and scenes after the restart.
+  Auto-persist never restarts Tasker. With an older phone
   project (no `TaskerMCP.Persist`) it falls back to driving Tasker's editor
   over adb, which needs adb (with `TASKER_URL` set, also `TASKER_ADB_SERIAL`)
   and an unlocked screen and takes about 25 seconds; on a phone without

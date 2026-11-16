@@ -96,6 +96,7 @@ beforeAll(async () => {
     home,
     cacheDir: home,
     forwardPort: 1821,
+    persistRestart: true,
     timeoutMs: 60_000,
     adbPath: ADB,
     autoForward: false,

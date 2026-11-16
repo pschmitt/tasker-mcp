@@ -37,6 +37,7 @@ function config(over: Partial<Config> = {}): Config {
     adbPath: "adb",
     autoForward: false,
     forwardPort: 1821,
+    persistRestart: true,
     autoPersist: false,
     policy: { allowConfigImport: true },
     ...over,

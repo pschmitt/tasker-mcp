@@ -36,6 +36,18 @@ describe("loadConfig", () => {
     expect(rel.cacheDir.replaceAll("\\", "/")).toBe("/home/u/.cache/tasker-mcp");
   });
 
+  it("restarts Tasker after persisting by default, and lets the flag and env turn that off", () => {
+    expect(load([]).config.persistRestart).toBe(true);
+    expect(load([], { TASKER_PERSIST_RESTART: "false" }).config.persistRestart).toBe(false);
+    expect(
+      load(["--no-persist-restart"], { TASKER_PERSIST_RESTART: "true" }).config.persistRestart,
+    ).toBe(false);
+    expect(
+      load(["--persist-restart"], { TASKER_PERSIST_RESTART: "false" }).config.persistRestart,
+    ).toBe(true);
+    expect(() => load([], { TASKER_PERSIST_RESTART: "maybe" })).toThrow(ConfigError);
+  });
+
   it("reads the adb forward port, defaulting to 1821", () => {
     expect(load([]).config.forwardPort).toBe(1821);
     expect(load([], { TASKER_FORWARD_PORT: "18211" }).config.forwardPort).toBe(18211);
@@ -72,6 +84,7 @@ describe("loadConfig", () => {
       adbPath: "/opt/adb",
       autoForward: false,
       forwardPort: 1821,
+      persistRestart: true,
       autoPersist: false,
       policy: { allowConfigImport: true },
     });
