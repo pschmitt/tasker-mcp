@@ -4,7 +4,7 @@
  * (or a phone) with the TaskerMCP project imported and Setup run.
  *
  * Env: TASKER_URL (default http://localhost:1821), TASKER_TOKEN or
- * TASKER_TOKEN_FILE (default ~/.tasker-mcp/emulator-token), TASKER_ADB_SERIAL
+ * TASKER_TOKEN_FILE (default $XDG_CONFIG_HOME/tasker-mcp/emulator-token), TASKER_ADB_SERIAL
  * (default emulator-5554). Writes only touch the global MCPTestVar and the
  * task TaskerMCP.Test.McpTool.
  */
@@ -31,7 +31,12 @@ import { register as variables } from "../../src/tools/variables.ts";
 const URL_ = process.env.TASKER_URL ?? "http://localhost:1821";
 const SERIAL = process.env.TASKER_ADB_SERIAL ?? "emulator-5554";
 const TOKEN_FILE =
-  process.env.TASKER_TOKEN_FILE ?? join(homedir(), ".tasker-mcp", "emulator-token");
+  process.env.TASKER_TOKEN_FILE ??
+  join(
+    process.env["XDG_CONFIG_HOME"] ?? join(homedir(), ".config"),
+    "tasker-mcp",
+    "emulator-token",
+  );
 
 function token(): string {
   const env = process.env.TASKER_TOKEN?.trim();

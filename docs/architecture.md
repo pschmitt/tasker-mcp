@@ -53,7 +53,7 @@ Docs follow a separate path: GitHub Actions scrapes the userguide into the
   policy), so tests inject fakes. Per-task `tasker_*` tools are registered
   dynamically from tasks tagged `#mcp`.
 - `src/docs`: lazy, disk-cached userguide search.
-- `src/snapshots.ts`: snapshot store under `~/.tasker-mcp/snapshots`, newest 20
+- `src/snapshots.ts`: snapshot store under `$XDG_STATE_HOME/tasker-mcp/snapshots`, newest 20
   kept.
 - `src/config.ts`, `src/adb.ts`: flags and env vars, the write policy, and the
   `adb forward` / device selection logic.

@@ -22,8 +22,10 @@ export const DEFAULT_DOCS_BASE_URL =
   "https://raw.githubusercontent.com/pmaxhogan/tasker-mcp/docs-data/";
 
 export interface DocsStoreOptions {
-  /** The tasker-mcp state dir; docs are cached in `<home>/docs/`. */
+  /** The tasker-mcp state dir; docs are cached in `<home>/docs/` unless cacheDir is set. */
   home: string;
+  /** The cache dir; docs are cached in `<cacheDir>/docs/` (XDG cache). */
+  cacheDir?: string;
   fetch?: typeof fetch;
   baseUrl?: string;
   /** Per-request timeout in ms (default 20000). */
@@ -85,7 +87,7 @@ export class DocsStore {
   private readonly pageInflight = new Map<string, Promise<string>>();
 
   constructor(opts: DocsStoreOptions) {
-    this.dir = join(opts.home, "docs");
+    this.dir = join(opts.cacheDir ?? opts.home, "docs");
     this.fetchImpl = opts.fetch ?? fetch;
     const base = opts.baseUrl ?? DEFAULT_DOCS_BASE_URL;
     this.baseUrl = base.endsWith("/") ? base : base + "/";

@@ -18,12 +18,27 @@ describe("loadConfig", () => {
       autoForward: true,
       autoPersist: false,
     });
-    expect(config.home.replaceAll("\\", "/")).toBe("/home/u/.tasker-mcp");
+    expect(config.home.replaceAll("\\", "/")).toBe("/home/u/.local/state/tasker-mcp");
+    expect(config.cacheDir.replaceAll("\\", "/")).toBe("/home/u/.cache/tasker-mcp");
   });
 
   it("uses the real homedir by default", () => {
     const { config } = loadConfig([], {});
-    expect(config.home).toContain(".tasker-mcp");
+    expect(config.home).toContain("tasker-mcp");
+  });
+
+  it("follows XDG_STATE_HOME and XDG_CACHE_HOME, ignoring relative values", () => {
+    const abs = load([], { XDG_STATE_HOME: "/s", XDG_CACHE_HOME: "/c" }).config;
+    expect(abs.home.replaceAll("\\", "/")).toBe("/s/tasker-mcp");
+    expect(abs.cacheDir.replaceAll("\\", "/")).toBe("/c/tasker-mcp");
+    const rel = load([], { XDG_STATE_HOME: "state", XDG_CACHE_HOME: "cache" }).config;
+    expect(rel.home.replaceAll("\\", "/")).toBe("/home/u/.local/state/tasker-mcp");
+    expect(rel.cacheDir.replaceAll("\\", "/")).toBe("/home/u/.cache/tasker-mcp");
+  });
+
+  it("lets --cache-dir and TASKER_MCP_CACHE_DIR override the cache dir", () => {
+    expect(load([], { TASKER_MCP_CACHE_DIR: "/k" }).config.cacheDir).toBe("/k");
+    expect(load(["--cache-dir", "/f"], { TASKER_MCP_CACHE_DIR: "/k" }).config.cacheDir).toBe("/f");
   });
 
   it("reads env vars", () => {
@@ -40,6 +55,7 @@ describe("loadConfig", () => {
       token: "abc",
       adbSerial: "S1",
       home: "/data",
+      cacheDir: "/home/u/.cache/tasker-mcp",
       timeoutMs: 5000,
       adbPath: "/opt/adb",
       autoForward: false,

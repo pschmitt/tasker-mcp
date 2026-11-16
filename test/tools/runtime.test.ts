@@ -32,6 +32,7 @@ function config(over: Partial<Config> = {}): Config {
     token: "tok",
     adbSerial: undefined,
     home,
+    cacheDir: home,
     timeoutMs: 1000,
     adbPath: "adb",
     autoForward: false,

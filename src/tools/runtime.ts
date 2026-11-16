@@ -249,7 +249,7 @@ export function createToolContext(config: Config, deps: RuntimeDeps = {}): Runti
     new SnapshotStore(join(config.home, "snapshots"), {
       keep: SNAPSHOT_KEEP,
     });
-  const docs = deps.docs ?? new DocsStore({ home: config.home });
+  const docs = deps.docs ?? new DocsStore({ home: config.home, cacheDir: config.cacheDir });
 
   const ctx: RuntimeContext = {
     config,

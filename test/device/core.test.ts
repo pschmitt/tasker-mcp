@@ -4,7 +4,7 @@
  *
  * Env: TASKER_URL (default http://localhost:1821, e.g. after
  * `adb forward tcp:1821 tcp:1821`), TASKER_TOKEN, or TASKER_TOKEN_FILE
- * (default ~/.tasker-mcp/emulator-token). Every object it creates is named
+ * (default $XDG_CONFIG_HOME/tasker-mcp/emulator-token). Every object it creates is named
  * "MCPTest.*" and afterAll deletes all of them in one config import, whatever
  * passed or failed. It needs config imports, so never point it at a real phone.
  */
@@ -38,7 +38,13 @@ const PROJECT = "MCPTest.Proj";
 function readToken(): string {
   const env = process.env["TASKER_TOKEN"];
   if (env !== undefined && env !== "") return env.trim();
-  const file = process.env["TASKER_TOKEN_FILE"] ?? join(homedir(), ".tasker-mcp", "emulator-token");
+  const file =
+    process.env["TASKER_TOKEN_FILE"] ??
+    join(
+      process.env["XDG_CONFIG_HOME"] ?? join(homedir(), ".config"),
+      "tasker-mcp",
+      "emulator-token",
+    );
   try {
     return readFileSync(file, "utf8").trim();
   } catch (e) {
@@ -86,6 +92,7 @@ beforeAll(async () => {
     token: readToken(),
     adbSerial: process.env["TASKER_ADB_SERIAL"],
     home,
+    cacheDir: home,
     timeoutMs: 60_000,
     adbPath: process.env["TASKER_ADB"] ?? "adb",
     autoForward: false,

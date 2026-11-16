@@ -103,7 +103,8 @@ Every option is an environment variable or a command line flag; flags win.
 | `TASKER_TOKEN_FILE`           | `--token-file`                                | unset                                        | File holding the token. Order: `--token`, `--token-file`, `TASKER_TOKEN`, `TASKER_TOKEN_FILE`.                      |
 | `TASKER_ADB_SERIAL`           | `--serial`                                    | unset                                        | adb device serial when more than one is attached.                                                                   |
 | `TASKER_ADB`                  | `--adb`                                       | `adb`                                        | adb executable.                                                                                                     |
-| `TASKER_MCP_HOME`             | `--home`                                      | `~/.tasker-mcp`                              | State directory (snapshots, docs cache).                                                                            |
+| `TASKER_MCP_HOME`             | `--home`                                      | `$XDG_STATE_HOME/tasker-mcp`                 | State directory (snapshots). `~/.local/state/tasker-mcp` when `XDG_STATE_HOME` is unset.                            |
+| `TASKER_MCP_CACHE_DIR`        | `--cache-dir`                                 | `$XDG_CACHE_HOME/tasker-mcp`                 | Cache directory (Tasker userguide). `~/.cache/tasker-mcp` when `XDG_CACHE_HOME` is unset.                           |
 | `TASKER_TIMEOUT_MS`           | `--timeout-ms`                                | `30000`                                      | Per-request timeout in milliseconds.                                                                                |
 | `TASKER_WRITE_ALLOW`          | `--write-allow`                               | unset (everything)                           | Comma separated name prefixes. Mutating tools only touch objects whose name starts with one.                        |
 | `TASKER_WRITE_ALLOW_PROJECTS` | `--write-allow-projects`                      | unset                                        | Comma separated project name prefixes. Those projects, and every task, profile and scene in them, are writable too. |
@@ -270,7 +271,7 @@ To make a task a tool:
 ## Safety net
 
 - **Snapshot before every mutation.** Each write first fetches a full backup and
-  saves it under `~/.tasker-mcp/snapshots`, keeping the newest 20. Undo with
+  saves it under `$XDG_STATE_HOME/tasker-mcp/snapshots`, keeping the newest 20. Undo with
   `restore_snapshot`.
 - **Verify-readback.** After an import the server re-fetches the configuration
   and checks that the change landed, and reports a mismatch instead of assuming
@@ -321,7 +322,7 @@ library was checked against Tasker's own editor, in both directions, is in
 ## Docs search
 
 The Tasker userguide is scraped weekly by a GitHub Action into the orphan
-`docs-data` branch of this repo and downloaded to `~/.tasker-mcp/docs` on first
+`docs-data` branch of this repo and downloaded to `$XDG_CACHE_HOME/tasker-mcp/docs` on first
 use of a docs tool. The text is (c) joaoapps and is never committed to `main`
 or shipped in the npm package.
 

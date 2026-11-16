@@ -4,7 +4,7 @@
  * Run with `npm run test:device`; never part of `npm test`.
  *
  * Env: TASKER_URL (default http://localhost:1821), TASKER_TOKEN or
- * TASKER_TOKEN_FILE (default ~/.tasker-mcp/emulator-token), TASKER_ADB_SERIAL
+ * TASKER_TOKEN_FILE (default $XDG_CONFIG_HOME/tasker-mcp/emulator-token), TASKER_ADB_SERIAL
  * (default emulator-5554, so a forgotten serial never lands on a real phone),
  * TASKER_ADB. It force-stops Tasker and drives its editor, so never point it
  * at a real phone.
@@ -31,7 +31,13 @@ const ADB = process.env["TASKER_ADB"] ?? "adb";
 function readToken(): string {
   const env = process.env["TASKER_TOKEN"];
   if (env !== undefined && env !== "") return env.trim();
-  const file = process.env["TASKER_TOKEN_FILE"] ?? join(homedir(), ".tasker-mcp", "emulator-token");
+  const file =
+    process.env["TASKER_TOKEN_FILE"] ??
+    join(
+      process.env["XDG_CONFIG_HOME"] ?? join(homedir(), ".config"),
+      "tasker-mcp",
+      "emulator-token",
+    );
   return readFileSync(file, "utf8").trim();
 }
 
@@ -88,6 +94,7 @@ beforeAll(async () => {
     token: readToken(),
     adbSerial: SERIAL,
     home,
+    cacheDir: home,
     timeoutMs: 60_000,
     adbPath: ADB,
     autoForward: false,

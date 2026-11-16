@@ -520,6 +520,7 @@ export async function createFakeContext(opts: FakeContextOptions = {}): Promise<
     token: "fake-token",
     adbSerial: undefined,
     home,
+    cacheDir: home,
     timeoutMs: 1000,
     adbPath: "adb",
     autoForward: false,

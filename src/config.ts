@@ -1,13 +1,16 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import type { WritePolicy } from "./tools/context.ts";
 
 export interface Config {
   url: string | undefined;
   token: string | undefined;
   adbSerial: string | undefined;
+  /** State directory (snapshots): `$XDG_STATE_HOME/tasker-mcp`. */
   home: string;
+  /** Cache directory (userguide docs): `$XDG_CACHE_HOME/tasker-mcp`. */
+  cacheDir: string;
   timeoutMs: number;
   adbPath: string;
   autoForward: boolean;
@@ -40,7 +43,10 @@ Options:
   --token <token>       Bearer token (env TASKER_TOKEN)
   --token-file <path>   Read the bearer token from a file (env TASKER_TOKEN_FILE)
   --serial <serial>     adb device serial (env TASKER_ADB_SERIAL)
-  --home <dir>          State directory (env TASKER_MCP_HOME, default ~/.tasker-mcp)
+  --home <dir>          State directory for snapshots (env TASKER_MCP_HOME, default
+                        $XDG_STATE_HOME/tasker-mcp, i.e. ~/.local/state/tasker-mcp)
+  --cache-dir <dir>     Cache directory for the userguide (env TASKER_MCP_CACHE_DIR,
+                        default $XDG_CACHE_HOME/tasker-mcp, i.e. ~/.cache/tasker-mcp)
   --timeout-ms <ms>     Request timeout (env TASKER_TIMEOUT_MS, default 30000)
   --adb <path>          adb executable (env TASKER_ADB, default "adb")
   --write-allow <list>  Comma separated name prefixes; mutating tools only touch
@@ -77,6 +83,7 @@ const VALUE_FLAGS = new Set([
   "token-file",
   "serial",
   "home",
+  "cache-dir",
   "timeout-ms",
   "adb",
   "write-allow",
@@ -233,7 +240,13 @@ export function loadConfig(
   const { flags, help, version } = parseArgv(argv);
   const pick = (flag: string, envName: string): string | undefined =>
     nonEmpty(flags.get(flag)) ?? nonEmpty(env[envName]);
-  const defaultHome = (): string => join(homeDir(), ".tasker-mcp");
+  // XDG base directories: only absolute values count, as the spec says.
+  const xdg = (name: string, fallback: string): string => {
+    const v = nonEmpty(env[name]);
+    return v !== undefined && isAbsolute(v) ? v : join(homeDir(), fallback);
+  };
+  const defaultHome = (): string => join(xdg("XDG_STATE_HOME", ".local/state"), "tasker-mcp");
+  const defaultCache = (): string => join(xdg("XDG_CACHE_HOME", ".cache"), "tasker-mcp");
 
   if (help || version) {
     return {
@@ -243,6 +256,7 @@ export function loadConfig(
         token: undefined,
         adbSerial: undefined,
         home: defaultHome(),
+        cacheDir: defaultCache(),
         timeoutMs: DEFAULT_TIMEOUT_MS,
         adbPath: "adb",
         autoForward: true,
@@ -293,6 +307,7 @@ export function loadConfig(
       token,
       adbSerial: pick("serial", "TASKER_ADB_SERIAL"),
       home: pick("home", "TASKER_MCP_HOME") ?? defaultHome(),
+      cacheDir: pick("cache-dir", "TASKER_MCP_CACHE_DIR") ?? defaultCache(),
       timeoutMs,
       adbPath: pick("adb", "TASKER_ADB") ?? "adb",
       autoForward: url === undefined,
