@@ -29,7 +29,7 @@
 		<cdate>1791158400000</cdate>
 		<name>TaskerMCP</name>
 		<pids>9010</pids>
-		<tids>9001,9002,9003</tids>
+		<tids>9001,9002,9003,9004</tids>
 	</Project>
 	<Task sr="task9001">
 		<cdate>1791158400000</cdate>
@@ -962,6 +962,87 @@ setGlobal("TaskerMCP_Debug", JSON.stringify(items));</Str>
 			<Str sr="arg1" ve="3"/>
 			<Int sr="arg2" val="1"/>
 			<Int sr="arg3" val="45"/>
+		</Action>
+	</Task>
+	<Task sr="task9004">
+		<cdate>1791158400000</cdate>
+		<edate>1791158400000</edate>
+		<id>9004</id>
+		<nme>TaskerMCP.Persist</nme>
+		<pc>Saves the running configuration as Tasker's own saved copy, without the editor or the screen.</pc>
+		<pri>100</pri>
+		<Action sr="act0" ve="7">
+			<code>322</code>
+			<se>false</se>
+			<Str sr="arg0" ve="3">/sdcard/Tasker/configs/user/tasker-mcp-persist.xml</Str>
+			<Str sr="arg1" ve="3"/>
+			<Int sr="arg2" val="0"/>
+		</Action>
+		<Action sr="act1" ve="7">
+			<code>474</code>
+			<Str sr="arg0" ve="3">// TaskerMCP.Persist, run by Tasker's Java Code action (BeanShell, inside Tasker's
+// own process). Runs right after Data Backup wrote the running configuration to
+// BACKUP, and makes that file Tasker's saved configuration, so it survives a
+// restart without opening the editor.
+//
+// Tasker loads its configuration from files/autobackup.xml in its private data
+// directory (verified on 6.7.9). Only Tasker's own process can write there,
+// which is why this runs as an action instead of over adb.
+//
+// Safety: the backup must parse and must not be empty, the current saved copy
+// is kept as PREVIOUS, and the swap is one rename. Returns one line:
+// "persisted &lt;bytes&gt; bytes tasks=N profiles=N projects=N scenes=N; ..." or a
+// line starting with REFUSED / FAILED.
+import java.io.*;
+import javax.xml.parsers.*;
+import org.w3c.dom.*;
+
+void copy(File a, File b) {
+  InputStream in = new FileInputStream(a);
+  OutputStream out = new FileOutputStream(b);
+  byte[] buf = new byte[8192];
+  int n;
+  while ((n = in.read(buf)) &gt; 0) out.write(buf, 0, n);
+  in.close();
+  out.close();
+}
+
+String info(File f) {
+  Document d = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(f);
+  return "tasks=" + d.getElementsByTagName("Task").getLength()
+    + " profiles=" + d.getElementsByTagName("Profile").getLength()
+    + " projects=" + d.getElementsByTagName("Project").getLength()
+    + " scenes=" + d.getElementsByTagName("Scene").getLength();
+}
+
+File live = new File("/sdcard/Tasker/configs/user/tasker-mcp-persist.xml");
+File dir = context.getFilesDir();
+File saved = new File(dir, "autobackup.xml");
+File tmp = new File(dir, "autobackup.xml.tmp");
+File previous = new File("/sdcard/Tasker/configs/user/tasker-mcp-autobackup-prev.xml");
+
+try {
+  if (!live.exists() || live.length() &lt; 2000) return "REFUSED: the backup is missing or tiny";
+  String liveInfo = info(live);
+  if (liveInfo.indexOf("tasks=0 ") &gt;= 0) return "REFUSED: the backup has no tasks: " + liveInfo;
+  if (saved.exists()) copy(saved, previous);
+  copy(live, tmp);
+  String tmpInfo = info(tmp);
+  if (!tmp.renameTo(saved)) return "FAILED: could not replace autobackup.xml";
+  return "persisted " + saved.length() + " bytes " + tmpInfo + "; previous kept as " + previous.getName();
+} catch (Exception e) {
+  return "FAILED: " + e;
+}</Str>
+			<Str sr="arg1" ve="3">%persist_result</Str>
+			<Int sr="arg2" val="0"/>
+		</Action>
+		<Action sr="act2" ve="7">
+			<code>126</code>
+			<Str sr="arg0" ve="3">%persist_result</Str>
+			<Int sr="arg1" val="1"/>
+			<Int sr="arg2" val="0"/>
+			<Int sr="arg3" val="0"/>
+			<Str sr="arg4" ve="3"/>
 		</Action>
 	</Task>
 </TaskerData>

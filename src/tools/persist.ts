@@ -8,7 +8,17 @@
  * only when the editor is dirty. So a change made over the API is lost when
  * Tasker restarts, and an editor save made before persisting overwrites it.
  *
- * The fix, driven over adb:
+ * Two ways to save the running copy:
+ *
+ * A. The phone project's TaskerMCP.Persist task (preferred, no adb and no
+ *    screen). Tasker loads its configuration from files/autobackup.xml in its
+ *    private data directory, and a Java Code action runs inside Tasker's own
+ *    process, so it can write there. The task writes the running copy with
+ *    Data Backup, checks that it parses, keeps the previous saved copy and
+ *    swaps the file in. Tasker picks it up at its next start. An editor that
+ *    is open keeps its stale copy until it is reopened, so a Tasker restart
+ *    shows the saved state. Needs the phone project with that task.
+ * B. The fallback, driven over adb (older phone projects):
  * 1. GET /backup: the phone project's Data Backup writes Active to
  *    /sdcard/Tasker/configs/user/tasker-mcp-live.xml.
  * 2. Open the editor fresh (CLEAR_TASK), menu > Data > Restore > User Local
@@ -20,6 +30,7 @@
  * 3. Wait for /ping (the restore may restart the monitor), then read /backup
  *    again and check nothing changed.
  */
+import type { RunResult } from "../client/index.ts";
 import { UiDriver, type UiNode } from "../device/ui.ts";
 import type { TaskerDoc } from "../model/document.ts";
 import { handler, ok, ToolError, type RegisterTools, type ToolContext } from "./context.ts";
@@ -76,17 +87,29 @@ export interface PersistOutcome {
   durationMs: number;
 }
 
-/**
- * True when persist can run at all: an adb serial is known. The write policy
- * does not gate it: the restore puts Tasker's own running configuration back
- * over itself, so it writes nothing the policy did not already let through.
- */
-export async function canPersist(ctx: ToolContext): Promise<boolean> {
-  try {
-    return (await ctx.serial()) !== undefined;
-  } catch {
-    return false;
-  }
+/** The phone project's task that saves the running configuration (see the module doc). */
+export const PERSIST_TASK = "TaskerMCP.Persist";
+
+const PERSIST_RESULT =
+  /^persisted \d+ bytes tasks=(\d+) profiles=(\d+) projects=(\d+) scenes=(\d+)/;
+
+export interface PersistCounts {
+  tasks: number;
+  profiles: number;
+  projects: number;
+  scenes: number;
+}
+
+/** Parse TaskerMCP.Persist's return line; null when it is not a success line. */
+export function parsePersistResult(text: string): PersistCounts | null {
+  const m = PERSIST_RESULT.exec(text.trim());
+  if (m === null) return null;
+  return {
+    tasks: Number(m[1]),
+    profiles: Number(m[2]),
+    projects: Number(m[3]),
+    scenes: Number(m[4]),
+  };
 }
 
 const manual = (prefix: string): string => `${prefix}do it on the phone: ${MANUAL_STEPS}`;
@@ -193,6 +216,53 @@ async function backupWithRetry(
 }
 
 /**
+ * Save the running configuration with the phone project's TaskerMCP.Persist
+ * task. Returns undefined when the task is not there (an older phone project)
+ * so the caller can fall back to the editor. A task that ran but refused or
+ * produced a different configuration is an error: the editor fallback would
+ * restore the same data.
+ */
+async function persistViaTask(
+  ctx: ToolContext,
+  before: TaskerDoc,
+  t: PersistTiming,
+  start: number,
+): Promise<PersistOutcome | undefined> {
+  let res: RunResult;
+  try {
+    res = await (await ctx.client()).run({ task: PERSIST_TASK, timeoutSec: 60 });
+  } catch {
+    return undefined;
+  }
+  const text = (res.return ?? "").trim();
+  if (/^(REFUSED|FAILED)/.test(text)) {
+    throw new ToolError(
+      `${PERSIST_TASK} did not save the configuration: ${text}`,
+      manual("fix that and call persist_config again, or "),
+    );
+  }
+  const got = parsePersistResult(text);
+  if (!res.ok || got === null) return undefined;
+  const s = before.summary();
+  const want: PersistCounts = {
+    tasks: s.tasks.length,
+    profiles: s.profiles.length,
+    projects: s.projects.length,
+    scenes: s.scenes.length,
+  };
+  const diff = (Object.keys(want) as Array<keyof PersistCounts>).filter((k) => want[k] !== got[k]);
+  if (diff.length > 0) {
+    throw new ToolError(
+      `${PERSIST_TASK} saved a different configuration than the one just read (${diff
+        .map((k) => `${k}: ${want[k]} read, ${got[k]} saved`)
+        .join("; ")})`,
+      "something changed Tasker's configuration meanwhile; call persist_config again",
+    );
+  }
+  return { persisted: true, durationMs: t.now() - start };
+}
+
+/**
  * Save the running configuration to disk. See the module doc. Holds the
  * mutation lock. Throws a ToolError with the manual steps when it cannot.
  */
@@ -201,15 +271,21 @@ export async function persistConfig(
   opts: Partial<PersistTiming> = {},
 ): Promise<PersistOutcome> {
   const t: PersistTiming = { ...persistDefaults, ...opts };
-  const serial = await ctx.serial();
-  if (serial === undefined) {
-    throw new ToolError(
-      "persist_config needs adb to drive Tasker's editor, and no adb device is configured",
-      manual("set TASKER_ADB_SERIAL / --serial (or leave TASKER_URL unset), or "),
-    );
-  }
   return exclusive(async () => {
     const start = t.now();
+    // Rewrites tasker-mcp-live.xml with the live configuration.
+    const before = await ctx.backup();
+    const viaTask = await persistViaTask(ctx, before.doc, t, start);
+    if (viaTask !== undefined) return viaTask;
+    const serial = await ctx.serial();
+    if (serial === undefined) {
+      throw new ToolError(
+        `persist_config needs the ${PERSIST_TASK} task (import the current tasker/TaskerMCP.prj.xml on the phone) or adb to drive Tasker's editor, and no adb device is configured`,
+        manual(
+          "import the TaskerMCP project again, set TASKER_ADB_SERIAL / --serial (or leave TASKER_URL unset), or ",
+        ),
+      );
+    }
     const ui = new UiDriver({
       exec: ctx.exec,
       adbPath: ctx.config.adbPath,
@@ -227,8 +303,6 @@ export async function persistConfig(
       );
     }
     const since = `${(await ui.shell("date", "+%s")).trim()}.000`;
-    // Rewrites tasker-mcp-live.xml with the live configuration.
-    const before = await ctx.backup();
     try {
       await restoreInEditor(ui, t);
     } catch (e) {
@@ -266,8 +340,9 @@ export const register: RegisterTools = (server, ctx) => {
       description:
         "Save Tasker's running configuration to disk so changes survive a Tasker restart or reboot. " +
         "Tasker only writes its configuration when its own editor saves, so every change made through tasker-mcp is live but unsaved until this runs (and saving in the editor first discards it). " +
-        "It drives Tasker's editor over adb (Data > Restore > tasker-mcp-live, then the Apply checkmark to save), then re-reads the configuration to check it. " +
-        "Needs adb (with TASKER_URL set, also TASKER_ADB_SERIAL) and an unlocked, awake screen; takes about 25 seconds. It works under a write allow list too. Call it once after a batch of changes. " +
+        "It runs the phone project's TaskerMCP.Persist task, which writes the configuration to Tasker's saved copy from inside Tasker: no adb and no screen needed, a few seconds. " +
+        "A Tasker editor that is open keeps its older copy until it is reopened, so restart Tasker to see the saved state. " +
+        "With an older phone project (no TaskerMCP.Persist task) it falls back to driving Tasker's editor over adb (Data > Restore > tasker-mcp-live, then the Apply checkmark; needs adb and an unlocked, awake screen, about 25 seconds). It works under a write allow list too. Call it once after a batch of changes. " +
         "Example: persist_config {}",
       inputSchema: {},
       annotations: {

@@ -109,7 +109,7 @@ Every option is an environment variable or a command line flag; flags win.
 | `TASKER_WRITE_ALLOW`          | `--write-allow`                               | unset (everything)                           | Comma separated name prefixes. Mutating tools only touch objects whose name starts with one.                        |
 | `TASKER_WRITE_ALLOW_PROJECTS` | `--write-allow-projects`                      | unset                                        | Comma separated project name prefixes. Those projects, and every task, profile and scene in them, are writable too. |
 | `TASKER_ALLOW_CONFIG_IMPORT`  | `--allow-config-import`, `--no-config-import` | `true`, or `false` when an allow list is set | Allow whole-configuration imports (see below).                                                                      |
-| `TASKER_AUTO_PERSIST`         | `--auto-persist`, `--no-auto-persist`         | `false`                                      | Run `persist_config` after every change (needs adb; about 25 s per change). See Limitations.                        |
+| `TASKER_AUTO_PERSIST`         | `--auto-persist`, `--no-auto-persist`         | `false`                                      | Run `persist_config` after every change (a few seconds with the `TaskerMCP.Persist` task). See Limitations.         |
 
 Also `--help` and `--version`.
 
@@ -229,9 +229,9 @@ Tools that change your Tasker configuration or phone state are marked **yes**.
 
 ### Saving to disk
 
-| Tool             | What it does                                                                                                                                                                                                                                           | Mutates |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| `persist_config` | Save Tasker's running configuration to disk so changes survive a Tasker restart or reboot. Drives Tasker's editor over adb (Data > Restore of the live backup, then the Apply checkmark to save); needs an unlocked screen and takes about 25 seconds. | yes     |
+| Tool             | What it does                                                                                                                                                                                                                                                                                              | Mutates |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `persist_config` | Save Tasker's running configuration to disk so changes survive a Tasker restart or reboot. Runs the phone project's `TaskerMCP.Persist` task (no adb, no screen); falls back to driving Tasker's editor over adb (Data > Restore of the live backup, then the Apply checkmark) on an older phone project. | yes     |
 
 Every mutating tool's result carries `persisted` (and a `persistHint` when it
 is `false`). See Limitations for why.
@@ -301,9 +301,18 @@ library was checked against Tasker's own editor, in both directions, is in
   restarts** (force-stop, update, reboot). Worse, if you open Tasker's editor
   and save anything before persisting, the editor's stale copy overwrites the
   changes. After a batch of changes, call `persist_config` (or start the server
-  with `TASKER_AUTO_PERSIST=true`, which does it after every change). It needs
-  adb (with `TASKER_URL` set, also `TASKER_ADB_SERIAL`) and an unlocked
-  screen; on a phone without adb, do it by hand: **Tasker >
+  with `TASKER_AUTO_PERSIST=true`, which does it after every change).
+  `persist_config` runs the phone project's `TaskerMCP.Persist` task: a Java
+  Code action runs inside Tasker's own process, writes the running
+  configuration to Tasker's saved copy (`files/autobackup.xml`, checked first,
+  the previous copy kept as `tasker-mcp-autobackup-prev.xml`), and Tasker loads
+  it at its next start. That needs no adb, no unlocked screen and takes a few
+  seconds. An editor that is already open keeps its older copy until you
+  reopen it, so restart Tasker to see the saved state. With an older phone
+  project (no `TaskerMCP.Persist`) it falls back to driving Tasker's editor
+  over adb, which needs adb (with `TASKER_URL` set, also `TASKER_ADB_SERIAL`)
+  and an unlocked screen and takes about 25 seconds; on a phone without
+  either, do it by hand: **Tasker >
   menu > Data > Restore > User Local Backup > tasker-mcp-live > OK, then tap the
   checkmark in the toolbar (or press Back)**. (Global variables and a profile's on/off state are saved by Tasker
   itself, but that save does not include other unsaved changes, so

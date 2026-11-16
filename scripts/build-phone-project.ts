@@ -27,9 +27,13 @@ const TV = "6.6.20";
 // Data Backup writes the live (Active) configuration where Tasker's Data > Restore >
 // User Local Backup picker looks, so persisting it to disk is one restore away.
 const BACKUP_PATH = "/sdcard/Tasker/configs/user/tasker-mcp-live.xml";
+// TaskerMCP.Persist writes its own backup, which tasker/java/persist.bsh then installs as
+// Tasker's saved configuration. Keep the path in sync with that script.
+const PERSIST_BACKUP_PATH = "/sdcard/Tasker/configs/user/tasker-mcp-persist.xml";
 
 const root = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
 const js = (name: string) => readFileSync(root(`tasker/js/${name}`), "utf8").trimEnd();
+const java = (name: string) => readFileSync(root(`tasker/java/${name}`), "utf8").trimEnd();
 
 // No spec lookup: every arg is written explicitly, nothing is defaulted.
 const lookup = () => undefined;
@@ -126,6 +130,11 @@ const A = {
       int(10, 1),
     ],
   }),
+  /** Java Code (layout as Tasker 6.7.9 exports it): code, return variable, structure output off. */
+  javaCode: (code: string, returnVar: string): ActionJson => ({
+    code: 474,
+    args: [str(0, code), str(1, returnVar), int(2, 0)],
+  }),
   stopTask: (task: string): ActionJson => ({
     code: 137,
     continueOnError: true,
@@ -203,7 +212,7 @@ function block(route: string, ...body: ActionJson[]): ActionJson[] {
   return [A.ifRoute(route), ...body, A.endIf()];
 }
 
-export const TASK_IDS = { dispatch: 9001, setup: 9002, debug: 9003 } as const;
+export const TASK_IDS = { dispatch: 9001, setup: 9002, debug: 9003, persist: 9004 } as const;
 const PROFILE_ID = 9010;
 
 function dispatchActions(): ActionJson[] {
@@ -280,6 +289,14 @@ function setupActions(): ActionJson[] {
   ];
 }
 
+function persistActions(): ActionJson[] {
+  return [
+    A.dataBackup(PERSIST_BACKUP_PATH),
+    A.javaCode(java("persist.bsh"), "%persist_result"),
+    A.returnValue("%persist_result"),
+  ];
+}
+
 const NOW = 1791158400000;
 
 function task(
@@ -343,7 +360,7 @@ function project(): XmlElement {
     leaf("cdate", String(NOW)),
     leaf("name", PROJECT_NAME),
     leaf("pids", String(PROFILE_ID)),
-    leaf("tids", [TASK_IDS.dispatch, TASK_IDS.setup, TASK_IDS.debug].join(",")),
+    leaf("tids", [TASK_IDS.dispatch, TASK_IDS.setup, TASK_IDS.debug, TASK_IDS.persist].join(",")),
   ]);
   return formatElement(el, 1);
 }
@@ -368,6 +385,12 @@ export function buildPhoneProject(): string {
       "TaskerMCP.Debug",
       "Perform Task with %par1 = message to add it to run_task's debug output.",
       [A.javascriptlet(js("debug.js"))],
+    ),
+    task(
+      TASK_IDS.persist,
+      "TaskerMCP.Persist",
+      "Saves the running configuration as Tasker's own saved copy, without the editor or the screen.",
+      persistActions(),
     ),
   ];
   const parts = [profile(), project(), ...tasks].map((e) => `\t${serializeElement(e)}\n`);

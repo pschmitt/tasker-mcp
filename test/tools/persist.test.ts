@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TaskerDoc } from "../../src/model/document.ts";
 import { exclusive } from "../../src/tools/mutate.ts";
 import {
-  canPersist,
   classifySaveLog,
   compareConfigs,
   MANUAL_STEPS,
   PERSIST_HINT,
   persistConfig,
+  PERSIST_TASK,
+  parsePersistResult,
   persistDefaults,
   type PersistTiming,
 } from "../../src/tools/persist.ts";
@@ -17,6 +18,7 @@ import {
   createFakeContext,
   EMPTY_BACKUP,
   type FakeContext,
+  type FakeRunner,
   type FakeContextOptions,
   type ToolHarness,
 } from "./fake-context.ts";
@@ -81,7 +83,8 @@ describe("persistConfig", () => {
     // Screen check comes first, before anything is touched.
     expect(cmds.slice(0, 2)).toEqual(["shell dumpsys window", "shell dumpsys power"]);
     // /backup refreshes the file before the GUI, and is read again to verify.
-    expect(phone.routes()).toEqual(["/backup", "/ping", "/backup"]);
+    // The TaskerMCP.Persist attempt comes first; this phone has no such task.
+    expect(phone.routes()).toEqual(["/backup", "/run", "/ping", "/backup"]);
   });
 
   it("dismisses a nag dialog on the way", async () => {
@@ -94,7 +97,7 @@ describe("persistConfig", () => {
   it("refuses without adb, with the manual steps", async () => {
     const { ctx } = await setup({ serial: null });
     const e = await persistConfig(ctx, timing()).catch((x: unknown) => x);
-    expect((e as Error).message).toMatch(/needs adb/);
+    expect((e as Error).message).toMatch(/needs the TaskerMCP.Persist task .* or adb/);
     expect((e as { hint: string }).hint).toContain(MANUAL_STEPS);
     expect(android.calls).toEqual([]);
   });
@@ -122,7 +125,8 @@ describe("persistConfig", () => {
     expect((e as Error).message).toContain(`screen is ${word}`);
     expect((e as { hint: string }).hint).toContain(MANUAL_STEPS);
     expect(android.commands().some((c) => c.includes("am start"))).toBe(false);
-    expect(phone.routes()).toEqual([]);
+    // Only the live backup and the Persist attempt reach the phone; the locked screen stops the editor path.
+    expect(phone.routes()).toEqual(["/backup", "/run"]);
   });
 
   it("never taps another backup: a picker without tasker-mcp-live fails and backs out", async () => {
@@ -281,23 +285,14 @@ describe("helpers", () => {
     ]);
   });
 
-  it("canPersist needs an adb serial, not config imports", async () => {
-    const { ctx } = await setup();
-    expect(await canPersist(ctx)).toBe(true);
-    await fc?.cleanup();
-    await t?.close();
-    const noAdb = await setup({ serial: null });
-    expect(await canPersist(noAdb.ctx)).toBe(false);
-    await t?.close();
-    const confined = await setup({ policy: { allowConfigImport: false } });
-    expect(await canPersist(confined.ctx)).toBe(true);
-    const broken = {
-      ...confined.ctx,
-      serial: async () => {
-        throw new Error("no device");
-      },
-    };
-    expect(await canPersist(broken)).toBe(false);
+  it("parsePersistResult reads the success line only", () => {
+    expect(
+      parsePersistResult(
+        "persisted 105878 bytes tasks=35 profiles=17 projects=5 scenes=1; previous kept as x.xml",
+      ),
+    ).toEqual({ tasks: 35, profiles: 17, projects: 5, scenes: 1 });
+    expect(parsePersistResult("REFUSED: the backup is missing or tiny")).toBeNull();
+    expect(parsePersistResult("")).toBeNull();
   });
 });
 
@@ -359,11 +354,13 @@ describe("persisted on mutating tool results", () => {
     ]);
   });
 
-  it("skips auto-persist with a warning when there is no adb", async () => {
+  it("warns when auto-persist has neither the Persist task nor adb", async () => {
     await setup({ autoPersist: true, serial: null });
     const r = await t!.call("rename", { kind: "task", from: "MCP.T1", to: "MCP.T2" });
     expect(r.json).toMatchObject({ ok: true, persisted: false, persistHint: PERSIST_HINT });
-    expect(r.json.warnings).toEqual([expect.stringMatching(/auto-persist skipped/)]);
+    expect(r.json.warnings).toEqual([
+      expect.stringMatching(/auto-persist failed: .*TaskerMCP.Persist/),
+    ]);
   });
 
   it("persists a multi-task import_xml once", async () => {
@@ -449,5 +446,57 @@ describe("persisted on mutating tool results", () => {
     expect(r.isError).toBe(true);
     expect(r.json).toMatchObject({ persisted: false, persistHint: PERSIST_HINT });
     expect(android.commands().some((c) => c.includes("am start"))).toBe(false);
+  });
+});
+
+describe("persistConfig via the TaskerMCP.Persist task", () => {
+  /** The success line for exactly what the fake phone holds, plus `extraTasks`. */
+  const saved =
+    (extraTasks = 0): FakeRunner =>
+    async (phone) => {
+      const s = phone.doc.summary();
+      return {
+        ok: true,
+        return: `persisted 4321 bytes tasks=${s.tasks.length + extraTasks} profiles=${s.profiles.length} projects=${s.projects.length} scenes=${s.scenes.length}; previous kept as p.xml`,
+        durationMs: 5,
+      };
+    };
+
+  it("saves without adb and without touching the screen", async () => {
+    const { ctx, phone } = await setup({ serial: null, runner: saved() });
+    const r = await persistConfig(ctx, timing());
+    expect(r).toEqual({ persisted: true, durationMs: expect.any(Number) });
+    expect(android.calls).toEqual([]);
+    expect(phone.routes()).toEqual(["/backup", "/run"]);
+    expect(phone.calls.find((c) => c.route === "/run")?.body).toMatchObject({ task: PERSIST_TASK });
+  });
+
+  it("works with a locked screen", async () => {
+    android.windowDump = "isKeyguardShowing=true";
+    const { ctx } = await setup({ runner: saved() });
+    expect((await persistConfig(ctx, timing())).persisted).toBe(true);
+    expect(android.calls).toEqual([]);
+  });
+
+  it("refuses a different configuration than the one just read", async () => {
+    const { ctx } = await setup({ runner: saved(5) });
+    await expect(persistConfig(ctx, timing())).rejects.toThrow(/tasks: \d+ read, \d+ saved/);
+    expect(android.calls).toEqual([]);
+  });
+
+  it("does not fall back to the editor when the task refuses", async () => {
+    const { ctx } = await setup({
+      runner: async () => ({ ok: true, return: "REFUSED: the backup has no tasks", durationMs: 5 }),
+    });
+    await expect(persistConfig(ctx, timing())).rejects.toThrow(/did not save .*REFUSED/);
+    expect(android.calls).toEqual([]);
+  });
+
+  it("falls back to the editor when the task answers with nothing", async () => {
+    const { ctx } = await setup({
+      runner: async () => ({ ok: true, return: "", durationMs: 5 }),
+    });
+    expect((await persistConfig(ctx, timing())).persisted).toBe(true);
+    expect(android.picked).toBe("tasker-mcp-live");
   });
 });

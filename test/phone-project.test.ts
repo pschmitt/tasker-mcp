@@ -18,6 +18,7 @@ describe("phone project", () => {
     expect(s.tasks.map((t) => t.name).sort()).toEqual([
       "TaskerMCP.Debug",
       "TaskerMCP.Dispatch",
+      "TaskerMCP.Persist",
       "TaskerMCP.Setup",
     ]);
   });

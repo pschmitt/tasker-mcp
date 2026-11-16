@@ -101,9 +101,23 @@ Verified on Tasker 6.6.20 (trial build) on an Android 17 emulator.
   Exceptions that Tasker saves itself: global variables, and a profile's
   enabled flag set with Profile Status (`/profile`); that save writes only the
   flag, not other unsaved changes.
-- **Persisting (`persist_config`).** `GET /backup` runs Data Backup, which
-  writes Active to `/sdcard/Tasker/configs/user/tasker-mcp-live.xml`. The
-  desktop server then drives the editor over adb:
+- **Persisting (`persist_config`), preferred path.** `POST /run` of the task
+  `TaskerMCP.Persist` (no adb, no screen). Tasker loads its saved configuration
+  from `files/autobackup.xml` in its private data directory (verified on
+  6.7.9; the only config file there), and a Java Code action (BeanShell) runs
+  inside Tasker's own process, so it can write it. The task runs Data Backup
+  to `/sdcard/Tasker/configs/user/tasker-mcp-persist.xml`, then
+  `tasker/java/persist.bsh` checks that the backup parses and has tasks, copies
+  the current `autobackup.xml` to `tasker-mcp-autobackup-prev.xml`, writes the
+  backup to `autobackup.xml.tmp` and renames it over `autobackup.xml`. It
+  returns `persisted <bytes> bytes tasks=N profiles=N projects=N scenes=N; ...`
+  (or `REFUSED:` / `FAILED:`); the server compares the counts with the
+  configuration it just read. A restarted Tasker shows the saved state; an
+  editor that was already open keeps its older copy until it is reopened.
+- **Persisting, fallback (older phone projects).** `GET /backup` runs Data
+  Backup, which writes Active to
+  `/sdcard/Tasker/configs/user/tasker-mcp-live.xml`. The desktop server then
+  drives the editor over adb:
   1. `am start -n net.dinglisch.android.taskerm/.Tasker -f 0x10008000`
      (CLEAR_TASK, so no stale editor instance is reused), dismissing nag
      dialogs.

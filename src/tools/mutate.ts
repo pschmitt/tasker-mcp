@@ -58,7 +58,7 @@ import {
 } from "../xml/index.ts";
 import { ToolError, type ObjectKind, type Snapshot, type ToolContext } from "./context.ts";
 import { exclusive } from "./lock.ts";
-import { canPersist, persistConfig, PERSIST_HINT } from "./persist.ts";
+import { persistConfig, PERSIST_HINT } from "./persist.ts";
 import { checkWritableIn, projectOfObject } from "./runtime.ts";
 
 // ---------------------------------------------------------------------------
@@ -87,12 +87,6 @@ export async function finishMutation(ctx: ToolContext, warnings: string[]): Prom
   const notPersisted: PersistFields = { persisted: false, persistHint: PERSIST_HINT };
   if (ctx.config.autoPersist !== true) return notPersisted;
   try {
-    if (!(await canPersist(ctx))) {
-      warnings.push(
-        "auto-persist skipped: it needs an adb device (set TASKER_ADB_SERIAL, or leave TASKER_URL unset)",
-      );
-      return notPersisted;
-    }
     await persistConfig(ctx);
     return { persisted: true };
   } catch (e) {
