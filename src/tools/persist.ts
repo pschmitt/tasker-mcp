@@ -259,7 +259,8 @@ async function restartTasker(
   try {
     await ui.shell("am", "force-stop", TASKER_PACKAGE);
     await t.sleep(t.settleMs);
-    await ui.shell("am", "start", "-n", `${TASKER_PACKAGE}/.Main`);
+    // The launcher entry: Tasker's .Main activity is not exported, so adb cannot start it.
+    await ui.shell("am", "start", "-n", TASKER_ACTIVITY);
     await t.sleep(t.settleMs);
     await ui.key("HOME").catch(() => undefined);
   } catch (e) {

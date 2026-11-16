@@ -115,7 +115,7 @@ Verified on Tasker 6.6.20 (trial build) on an Android 17 emulator.
   configuration it just read. A restarted Tasker shows the saved state; an
   editor that was already open keeps its older copy until it is reopened, so
   `persist_config` then runs `am force-stop net.dinglisch.android.taskerm` and
-  `am start -n net.dinglisch.android.taskerm/.Main` over adb (Home key
+  `am start -n net.dinglisch.android.taskerm/.Tasker` over adb (Home key
   afterwards), waits for `/ping` and compares `/backup` with what it saved.
 - **Persisting, fallback (older phone projects).** `GET /backup` runs Data
   Backup, which writes Active to

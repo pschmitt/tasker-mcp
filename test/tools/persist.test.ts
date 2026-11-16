@@ -482,7 +482,7 @@ describe("persistConfig via the TaskerMCP.Persist task", () => {
     expect(r).toEqual({ persisted: true, durationMs: expect.any(Number), restarted: true });
     expect(android.commands()).toEqual([
       "shell am force-stop net.dinglisch.android.taskerm",
-      "shell am start -n net.dinglisch.android.taskerm/.Main",
+      "shell am start -n net.dinglisch.android.taskerm/.Tasker",
       "shell input keyevent KEYCODE_HOME",
     ]);
     // Saved, then the server is awaited and the configuration read again to compare.
