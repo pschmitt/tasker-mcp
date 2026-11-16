@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import type { Config } from "./config.ts";
-import { DEFAULT_URL } from "./config.ts";
 
 export interface ExecResult {
   stdout: string;
@@ -245,14 +244,18 @@ export async function logcat(
 
 export const FORWARD_PORT = 1821;
 
-/** Resolve the Tasker URL: config.url if set, else adb-forward tcp:1821 to the chosen device. */
+/**
+ * Resolve the Tasker URL: config.url if set, else adb-forward a local port
+ * (config.forwardPort, default 1821) to tcp:1821 on the chosen device.
+ */
 export async function ensureForward(
-  config: Pick<Config, "url" | "adbSerial" | "adbPath">,
+  config: Pick<Config, "url" | "adbSerial" | "adbPath"> & { forwardPort?: number },
   exec: Exec = defaultExec,
 ): Promise<string> {
   if (config.url) return config.url;
   const devices = await listDevices(exec, config.adbPath);
   const dev = pickDevice(devices, config.adbSerial);
-  await forward(exec, config.adbPath, dev.serial, FORWARD_PORT, FORWARD_PORT);
-  return DEFAULT_URL;
+  const local = config.forwardPort ?? FORWARD_PORT;
+  await forward(exec, config.adbPath, dev.serial, local, FORWARD_PORT);
+  return `http://localhost:${local}`;
 }

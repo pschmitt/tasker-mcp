@@ -93,6 +93,7 @@ beforeAll(async () => {
     adbSerial: process.env["TASKER_ADB_SERIAL"],
     home,
     cacheDir: home,
+    forwardPort: 1821,
     timeoutMs: 60_000,
     adbPath: process.env["TASKER_ADB"] ?? "adb",
     autoForward: false,

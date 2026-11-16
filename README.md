@@ -115,22 +115,31 @@ Verify with the `ping` tool.
 
 Every option is an environment variable or a command line flag; flags win.
 
-| Env var                       | Flag                                          | Default                                      | Meaning                                                                                                             |
-| ----------------------------- | --------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `TASKER_URL`                  | `--url`                                       | unset                                        | Phone URL, e.g. `http://192.168.1.50:1821`. Unset means auto `adb forward` to `localhost`.                          |
-| `TASKER_TOKEN`                | `--token`                                     | unset                                        | Bearer token.                                                                                                       |
-| `TASKER_TOKEN_FILE`           | `--token-file`                                | unset                                        | File holding the token. Order: `--token`, `--token-file`, `TASKER_TOKEN`, `TASKER_TOKEN_FILE`.                      |
-| `TASKER_ADB_SERIAL`           | `--serial`                                    | unset                                        | adb device serial when more than one is attached.                                                                   |
-| `TASKER_ADB`                  | `--adb`                                       | `adb`                                        | adb executable.                                                                                                     |
-| `TASKER_MCP_HOME`             | `--home`                                      | `$XDG_STATE_HOME/tasker-mcp`                 | State directory (snapshots). `~/.local/state/tasker-mcp` when `XDG_STATE_HOME` is unset.                            |
-| `TASKER_MCP_CACHE_DIR`        | `--cache-dir`                                 | `$XDG_CACHE_HOME/tasker-mcp`                 | Cache directory (Tasker userguide). `~/.cache/tasker-mcp` when `XDG_CACHE_HOME` is unset.                           |
-| `TASKER_TIMEOUT_MS`           | `--timeout-ms`                                | `30000`                                      | Per-request timeout in milliseconds.                                                                                |
-| `TASKER_WRITE_ALLOW`          | `--write-allow`                               | unset (everything)                           | Comma separated name prefixes. Mutating tools only touch objects whose name starts with one.                        |
-| `TASKER_WRITE_ALLOW_PROJECTS` | `--write-allow-projects`                      | unset                                        | Comma separated project name prefixes. Those projects, and every task, profile and scene in them, are writable too. |
-| `TASKER_ALLOW_CONFIG_IMPORT`  | `--allow-config-import`, `--no-config-import` | `true`, or `false` when an allow list is set | Allow whole-configuration imports (see below).                                                                      |
-| `TASKER_AUTO_PERSIST`         | `--auto-persist`, `--no-auto-persist`         | `false`                                      | Run `persist_config` after every change (a few seconds with the `TaskerMCP.Persist` task). See Limitations.         |
+| Env var                       | Flag                                          | Default                                      | Meaning                                                                                                                                     |
+| ----------------------------- | --------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TASKER_URL`                  | `--url`                                       | unset                                        | Phone URL, e.g. `http://192.168.1.50:1821`. Unset means auto `adb forward` to `localhost`.                                                  |
+| `TASKER_TOKEN`                | `--token`                                     | unset                                        | Bearer token.                                                                                                                               |
+| `TASKER_TOKEN_FILE`           | `--token-file`                                | unset                                        | File holding the token. Order: `--token`, `--token-file`, `TASKER_TOKEN`, `TASKER_TOKEN_FILE`.                                              |
+| `TASKER_ADB_SERIAL`           | `--serial`                                    | unset                                        | adb device serial when more than one is attached.                                                                                           |
+| `TASKER_FORWARD_PORT`         | `--forward-port`                              | `1821`                                       | Local port of the adb forward to the phone (the phone always serves 1821). Use a different one per phone when you run one server per phone. |
+| `TASKER_ADB`                  | `--adb`                                       | `adb`                                        | adb executable.                                                                                                                             |
+| `TASKER_MCP_HOME`             | `--home`                                      | `$XDG_STATE_HOME/tasker-mcp`                 | State directory (snapshots). `~/.local/state/tasker-mcp` when `XDG_STATE_HOME` is unset.                                                    |
+| `TASKER_MCP_CACHE_DIR`        | `--cache-dir`                                 | `$XDG_CACHE_HOME/tasker-mcp`                 | Cache directory (Tasker userguide). `~/.cache/tasker-mcp` when `XDG_CACHE_HOME` is unset.                                                   |
+| `TASKER_TIMEOUT_MS`           | `--timeout-ms`                                | `30000`                                      | Per-request timeout in milliseconds.                                                                                                        |
+| `TASKER_WRITE_ALLOW`          | `--write-allow`                               | unset (everything)                           | Comma separated name prefixes. Mutating tools only touch objects whose name starts with one.                                                |
+| `TASKER_WRITE_ALLOW_PROJECTS` | `--write-allow-projects`                      | unset                                        | Comma separated project name prefixes. Those projects, and every task, profile and scene in them, are writable too.                         |
+| `TASKER_ALLOW_CONFIG_IMPORT`  | `--allow-config-import`, `--no-config-import` | `true`, or `false` when an allow list is set | Allow whole-configuration imports (see below).                                                                                              |
+| `TASKER_AUTO_PERSIST`         | `--auto-persist`, `--no-auto-persist`         | `false`                                      | Run `persist_config` after every change (a few seconds with the `TaskerMCP.Persist` task). See Limitations.                                 |
 
 Also `--help` and `--version`.
+
+### Several phones
+
+One server process talks to one phone. To use several, register the server once
+per phone under different names, each with its own `TASKER_ADB_SERIAL` (or
+`TASKER_URL`), token file, state directory (`TASKER_MCP_HOME`) and adb forward
+port (`TASKER_FORWARD_PORT`, so the forwards do not collide). The tools of each
+server then show up under that server's name.
 
 ### Safe mode for a real phone
 

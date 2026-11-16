@@ -14,6 +14,8 @@ export interface Config {
   timeoutMs: number;
   adbPath: string;
   autoForward: boolean;
+  /** Local port the adb forward listens on (TASKER_FORWARD_PORT); the phone always serves 1821. */
+  forwardPort: number;
   /**
    * Write scope for mutating tools (TASKER_WRITE_ALLOW,
    * TASKER_WRITE_ALLOW_PROJECTS, TASKER_ALLOW_CONFIG_IMPORT).
@@ -30,7 +32,8 @@ export interface LoadedConfig {
   config: Config;
 }
 
-export const DEFAULT_URL = "http://localhost:1821";
+export const DEFAULT_FORWARD_PORT = 1821;
+export const DEFAULT_URL = `http://localhost:${DEFAULT_FORWARD_PORT}`;
 export const DEFAULT_TIMEOUT_MS = 30000;
 
 export const HELP_TEXT = `tasker-mcp - MCP server for Tasker on Android (stdio)
@@ -48,6 +51,9 @@ Options:
   --cache-dir <dir>     Cache directory for the userguide (env TASKER_MCP_CACHE_DIR,
                         default $XDG_CACHE_HOME/tasker-mcp, i.e. ~/.cache/tasker-mcp)
   --timeout-ms <ms>     Request timeout (env TASKER_TIMEOUT_MS, default 30000)
+  --forward-port <port> Local port for the adb forward to the phone (env
+                        TASKER_FORWARD_PORT, default 1821). Give each phone its own
+                        when you run one server per phone.
   --adb <path>          adb executable (env TASKER_ADB, default "adb")
   --write-allow <list>  Comma separated name prefixes; mutating tools only touch
                         tasks, profiles, projects, scenes and globals whose name
@@ -85,6 +91,7 @@ const VALUE_FLAGS = new Set([
   "home",
   "cache-dir",
   "timeout-ms",
+  "forward-port",
   "adb",
   "write-allow",
   "write-allow-projects",
@@ -260,6 +267,7 @@ export function loadConfig(
         timeoutMs: DEFAULT_TIMEOUT_MS,
         adbPath: "adb",
         autoForward: true,
+        forwardPort: DEFAULT_FORWARD_PORT,
         policy: { ...DEFAULT_POLICY },
         autoPersist: false,
       },
@@ -300,6 +308,17 @@ export function loadConfig(
     }
   }
 
+  const rawPort = pick("forward-port", "TASKER_FORWARD_PORT");
+  let forwardPort = DEFAULT_FORWARD_PORT;
+  if (rawPort !== undefined) {
+    forwardPort = Number(rawPort);
+    if (!Number.isInteger(forwardPort) || forwardPort < 1 || forwardPort > 65535) {
+      throw new ConfigError(
+        `Invalid forward port "${rawPort}": --forward-port / TASKER_FORWARD_PORT must be an integer from 1 to 65535.`,
+      );
+    }
+  }
+
   return {
     action: "run",
     config: {
@@ -311,6 +330,7 @@ export function loadConfig(
       timeoutMs,
       adbPath: pick("adb", "TASKER_ADB") ?? "adb",
       autoForward: url === undefined,
+      forwardPort,
       policy: loadPolicy(flags, env),
       autoPersist: loadAutoPersist(flags, env),
     },

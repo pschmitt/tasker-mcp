@@ -36,6 +36,7 @@ function config(over: Partial<Config> = {}): Config {
     timeoutMs: 1000,
     adbPath: "adb",
     autoForward: false,
+    forwardPort: 1821,
     autoPersist: false,
     policy: { allowConfigImport: true },
     ...over,
@@ -224,6 +225,25 @@ describe("createToolContext", () => {
     expect(seen[0]?.url).toBe("http://localhost:1821/backup");
     expect((await ctx.snapshot("t", "l")).info.device).toBe("emu-5554");
     expect(await ctx.serial()).toBe("emu-5554");
+  });
+
+  it("forwards a configured local port and talks to it", async () => {
+    const calls: string[][] = [];
+    const exec: Exec = async (_f, args) => {
+      calls.push(args);
+      if (args[0] === "devices") {
+        return { stdout: "List of devices attached\nemu-5554\tdevice\n", stderr: "", code: 0 };
+      }
+      return { stdout: "", stderr: "", code: 0 };
+    };
+    const seen: Seen[] = [];
+    const ctx = createToolContext(
+      config({ url: undefined, autoForward: true, forwardPort: 18211 }),
+      { exec, fetch: phoneFetch(seen) },
+    );
+    await ctx.backup();
+    expect(calls).toContainEqual(["-s", "emu-5554", "forward", "tcp:18211", "tcp:1821"]);
+    expect(seen[0]?.url).toBe("http://localhost:18211/backup");
   });
 
   it("surfaces adb failures without caching them", async () => {

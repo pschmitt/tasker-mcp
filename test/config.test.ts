@@ -36,6 +36,18 @@ describe("loadConfig", () => {
     expect(rel.cacheDir.replaceAll("\\", "/")).toBe("/home/u/.cache/tasker-mcp");
   });
 
+  it("reads the adb forward port, defaulting to 1821", () => {
+    expect(load([]).config.forwardPort).toBe(1821);
+    expect(load([], { TASKER_FORWARD_PORT: "18211" }).config.forwardPort).toBe(18211);
+    expect(
+      load(["--forward-port", "18212"], { TASKER_FORWARD_PORT: "18211" }).config.forwardPort,
+    ).toBe(18212);
+  });
+
+  it.each(["0", "70000", "abc", "1.5"])("rejects the forward port %s", (v) => {
+    expect(() => load([], { TASKER_FORWARD_PORT: v })).toThrow(ConfigError);
+  });
+
   it("lets --cache-dir and TASKER_MCP_CACHE_DIR override the cache dir", () => {
     expect(load([], { TASKER_MCP_CACHE_DIR: "/k" }).config.cacheDir).toBe("/k");
     expect(load(["--cache-dir", "/f"], { TASKER_MCP_CACHE_DIR: "/k" }).config.cacheDir).toBe("/f");
@@ -59,6 +71,7 @@ describe("loadConfig", () => {
       timeoutMs: 5000,
       adbPath: "/opt/adb",
       autoForward: false,
+      forwardPort: 1821,
       autoPersist: false,
       policy: { allowConfigImport: true },
     });

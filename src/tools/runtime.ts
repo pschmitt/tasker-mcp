@@ -204,10 +204,10 @@ export function createToolContext(config: Config, deps: RuntimeDeps = {}): Runti
     if (baseUrl === undefined || config.autoForward) {
       const devices = await listDevices(exec, config.adbPath);
       const dev = pickDevice(devices, config.adbSerial);
-      await forward(exec, config.adbPath, dev.serial, FORWARD_PORT, FORWARD_PORT);
+      await forward(exec, config.adbPath, dev.serial, config.forwardPort, FORWARD_PORT);
       resolvedSerial = dev.serial;
-      baseUrl = DEFAULT_URL;
-      log(`adb forward tcp:${FORWARD_PORT} -> ${dev.serial}`);
+      baseUrl = `http://localhost:${config.forwardPort}`;
+      log(`adb forward tcp:${config.forwardPort} -> ${dev.serial}:${FORWARD_PORT}`);
     }
     resolvedUrl = baseUrl;
     return new TaskerClient({

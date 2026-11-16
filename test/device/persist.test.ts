@@ -95,6 +95,7 @@ beforeAll(async () => {
     adbSerial: SERIAL,
     home,
     cacheDir: home,
+    forwardPort: 1821,
     timeoutMs: 60_000,
     adbPath: ADB,
     autoForward: false,

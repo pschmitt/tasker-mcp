@@ -212,6 +212,20 @@ describe("ensureForward", () => {
     expect(calls[1]).toEqual(["-s", "emulator-5554", "forward", "tcp:1821", "tcp:1821"]);
   });
 
+  it("forwards the configured local port to the phone's 1821", async () => {
+    const calls: string[][] = [];
+    const exec: Exec = async (_f, args) => {
+      calls.push(args);
+      return args[0] === "devices" ? ok(DEVICES_OUT) : ok("");
+    };
+    const url = await ensureForward(
+      { url: undefined, adbSerial: "emulator-5554", adbPath: "adb", forwardPort: 18211 },
+      exec,
+    );
+    expect(url).toBe("http://localhost:18211");
+    expect(calls[1]).toEqual(["-s", "emulator-5554", "forward", "tcp:18211", "tcp:1821"]);
+  });
+
   it("propagates ambiguity errors", async () => {
     const exec: Exec = async () => ok(DEVICES_OUT);
     await expect(
